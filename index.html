@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Догон</title>
+<style>body{font-family:sans-serif;background:#111;color:#eee;padding:16px;max-width:640px;margin:auto}
+input,button{font-size:16px;padding:8px;margin:4px 0;width:100%;box-sizing:border-box;background:#222;color:#eee;border:1px solid #444;border-radius:6px}
+button{background:#4f8cff;border:none;font-weight:bold;margin-top:10px}
+.k{background:#1a1a1a;padding:8px;margin:4px 0;border-radius:6px}</style></head><body>
+<h1>Догон — симулятор</h1>
+<label>Стек<input id=B type=number value=10000></label>
+<label>Мин. ставка<input id=b type=number value=100></label>
+<label>Множитель<input id=m type=number step=0.1 value=2></label>
+<label>Кэф (рулетка 1:1 → 2.0)<input id=D type=number step=0.01 value=2.0></label>
+<label>P(win), %<input id=P type=number step=0.1 value=48.6></label>
+<label>Ставок в сессии<input id=n type=number value=200></label>
+<button onclick="run(1)">Одна сессия</button>
+<button onclick="run(2000)">Монте-Карло (2000)</button>
+<div id=out></div>
+<script>
+function g(id){return +document.getElementById(id).value}
+function sim(B,b,m,D,p,n){let bank=B,bet=b,peak=B,dd=0,maxBet=b,busted=false,at=null;
+for(let i=1;i<=n;i++){if(bank<bet){busted=true;at=i;break}bank-=bet;
+if(Math.random()<p){bank+=bet*D;bet=b}else{bet*=m}
+if(bet>maxBet)maxBet=bet;if(bank>peak)peak=bank;const d=peak-bank;if(d>dd)dd=d}
+return{bank,maxBet,dd,busted,at}}
+function run(S){const B=g('B'),b=g('b'),m=g('m'),D=g('D'),p=g('P')/100,n=g('n');
+if(B<=0||b<=0||m<=1||D<=1||p<=0||p>=1){document.getElementById('out').innerHTML='<p>Проверь параметры.</p>';return}
+const arr=[];for(let i=0;i<S;i++)arr.push(sim(B,b,m,D,p,n));
+const avg=arr.reduce((s,x)=>s+x.bank,0)/S,busts=arr.filter(x=>x.busted).length,maxBet=Math.max(...arr.map(x=>x.maxBet));
+document.getElementById('out').innerHTML='<h2>Результат ('+S+' сессий)</h2><div class=k>Средний итог: <b>'+avg.toFixed(0)+'</b></div><div class=k>Слился: <b>'+(busts/S*100).toFixed(1)+'%</b></div><div class=k>Макс. ставка: <b>'+maxBet.toFixed(0)+'</b></div>'}
+</script></body></html>
