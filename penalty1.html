@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Пенальти ДА/НЕТ · 1 контора</title>
+<style>
+  *{box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    background:#0f1115;color:#e8edf5;margin:0 auto;padding:16px;
+    max-width:620px;line-height:1.45}
+  h1{font-size:21px;margin:6px 0 4px}
+  h2{font-size:13px;margin:20px 0 8px;color:#8b95a7;text-transform:uppercase;
+    letter-spacing:.5px;font-weight:600}
+  .lead{color:#8b95a7;font-size:14px;margin:0 0 16px}
+  .card{background:#171a21;border:1px solid #252a34;border-radius:14px;
+    padding:16px;margin-bottom:10px}
+  label{display:block;font-size:13px;color:#8b95a7;margin-bottom:4px;margin-top:10px}
+  label:first-child{margin-top:0}
+  input,select{width:100%;padding:11px 12px;font-size:16px;background:#0d1017;
+    color:#e8edf5;border:1px solid #252a34;border-radius:10px}
+  input:focus,select:focus{outline:none;border-color:#4f8cff}
+  button.go{width:100%;padding:14px;font-size:16px;font-weight:600;
+    background:#4f8cff;color:#fff;border:none;border-radius:12px;
+    margin-top:14px;cursor:pointer}
+  .verdict{padding:14px;border-radius:12px;font-size:15px;font-weight:600;
+    text-align:center;margin:14px 0}
+  .yes{background:#12261a;border:1px solid #1f4a2e;color:#b8f0c8}
+  .no{background:#2a1a1a;border:1px solid #4a2a2a;color:#ffb4b4}
+  .info{background:#0f2030;border:1px solid #1c3a52;color:#bfdcff}
+  .line{display:flex;justify-content:space-between;padding:8px 0;
+    border-bottom:1px solid #252a34;font-size:14px}
+  .line:last-child{border:none}
+  .line b{color:#fff}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+  th,td{padding:7px 6px;border-bottom:1px solid #252a34;text-align:right}
+  th:first-child,td:first-child{text-align:left;color:#8b95a7}
+  th{color:#8b95a7;font-weight:500;font-size:12px}
+  .pos{color:#2ecc71}
+  .neg{color:#ff5c5c}
+  .dim{opacity:.4}
+  .win{background:#12261a}
+  .hint{font-size:12.5px;color:#8b95a7;margin-top:10px}
+  .warn{background:#2a1a1a;border:1px solid #4a2a2a;color:#ffb4b4;
+    padding:11px;border-radius:10px;font-size:13px;margin-top:12px}
+</style>
+</head>
+<body>
+
+<h1>Пенальти ДА/НЕТ · 1 контора</h1>
+<p class="lead">Одна контора. Ставим всё время на одну сторону. Показывает: сколько ставок выдержит банк, где будет победа, где слив.</p>
+
+<div class="card">
+  <label>Сторона ставки</label>
+  <select id="side">
+    <option value="yes">ДА · пенальти будет</option>
+    <option value="no">НЕТ · пенальти не будет</option>
+  </select>
+  <label>Кэф ДА</label>
+  <input id="kYes" type="number" step="0.01" value="3.80">
+  <label>Кэф НЕТ</label>
+  <input id="kNo" type="number" step="0.01" value="1.27">
+  <label>Банк, ₽</label>
+  <input id="bank" type="number" step="100" value="10000">
+  <label>Минимальная ставка, ₽</label>
+  <input id="minBet" type="number" step="50" value="100">
+  <label>Множитель после проигрыша</label>
+  <input id="mult" type="number" step="0.01" value="1.36">
+  <button class="go" onclick="calc()">Посчитать</button>
+</div>
+
+<div id="out"></div>
+
+<div class="warn">
+  В одной конторе вилки нет. Маржа 4–8% всегда против тебя. Догон лишь перекладывает риск: частые мелкие плюсы, редкий слив всего банка.
+</div>
+
+<script>
+const R = x => Number.isFinite(x) ? Math.round(x).toLocaleString('ru-RU')+' ₽' : '—';
+const F = (x,d=2) => Number.isFinite(x) ? x.toFixed(d) : '—';
+
+function calc(){
+  const side = document.getElementById('side').value;
+  const kY = +document.getElementById('kYes').value;
+  const kN = +document.getElementById('kNo').value;
+  const bank = +document.getElementById('bank').value;
+  const minBet = +document.getElementById('minBet').value;
+  const mult = +document.getElementById('mult').value;
+  const out = document.getElementById('out');
+
+  if(!(kY>1)||!(kN>1)||!(bank>0)||!(minBet>0)||!(mult>1)){
+    out.innerHTML = '<div class="verdict no">Проверь параметры.</div>';
+    return;
+  }
+
+  const k = side==='yes' ? kY : kN;
+  const kOther = side==='yes' ? kN : kY;
+  const label = side==='yes' ? 'ДА' : 'НЕТ';
+  const labelOther = side==='yes' ? 'НЕТ' : 'ДА';
+
+  // Вероятности
+  const impY = 1/kY, impN = 1/kN;
+  const sum = impY + impN;
+  const margin = (sum - 1) * 100;
+  const impChosen = 1/k;
+  const fairP = 1/k; // implied вероятность нашей стороны
+
+  // EV на 1 ставку при честной вероятности
+  const evUnit = fairP * (k-1) - (1 - fairP);
+
+  // Идеальный множитель для догона
+  const idealM = k / (k - 1);
+
+  // Сколько ставок выдержит банк
+  let steps = 0, cum = 0, st = minBet;
+  while(cum + st <= bank + 1e-9 && steps < 100){
+    cum += st;
+    steps++;
+    st *= mult;
+  }
+
+  // Таблица 10 шагов
+  let rows = '';
+  let total = 0, stake = minBet, bust = 0;
+  for(let i=1;i<=10;i++){
+    total += stake;
+    const win = stake * k;
+    const profit = win - total;
+    const bad = total > bank;
+    if(bad && !bust) bust = i;
+    const cls = bad ? 'dim' : (i===1 ? 'win' : '');
+    rows += '<tr class="'+cls+'">'+
+      '<td>'+i+'</td>'+
+      '<td>'+R(stake)+'</td>'+
+      '<td>'+R(total)+'</td>'+
+      '<td class="'+(profit>=0?'pos':'neg')+'">'+(profit>=0?'+':'')+R(profit)+'</td>'+
+    '</tr>';
+    stake *= mult;
+  }
+
+  let html = '';
+
+  // --- Блок 1. Что говорит математика ---
+  html += '<h2>1. Что говорит математика</h2><div class="card">';
+  html += '<div class="line"><span>Ставка на</span><b>'+label+'</b></div>';
+  html += '<div class="line"><span>Кэф нашей стороны</span><b>'+F(k)+'</b></div>';
+  html += '<div class="line"><span>Кэф другой стороны</span><b>'+F(kOther)+'</b></div>';
+  html += '<div class="line"><span>Implied ДА</span><b>'+F(impY*100)+'%</b></div>';
+  html += '<div class="line"><span>Implied НЕТ</span><b>'+F(impN*100)+'%</b></div>';
+  html += '<div class="line"><span>Маржа конторы</span><b class="neg">'+F(margin)+'%</b></div>';
+  html += '<div class="line"><span>EV с 1 ₽ ставки</span><b class="neg">'+F(evUnit,4)+'</b></div>';
+  html += '</div>';
+
+  if(margin > 10){
+    html += '<div class="verdict no">Маржа '+F(margin)+'% — очень дорого. Ищи другую контору.</div>';
+  } else if(margin > 6){
+    html += '<div class="verdict info">Маржа '+F(margin)+'% — нормально, но не идеально.</div>';
+  } else {
+    html += '<div class="verdict yes">Маржа '+F(margin)+'% — хорошие кэфы.</div>';
+  }
+
+  // --- Блок 2. Множитель ---
+  html += '<h2>2. Множитель догона</h2><div class="card">';
+  html += '<div class="line"><span>Твой множитель</span><b>×'+F(mult)+'</b></div>';
+  html += '<div class="line"><span>Идеальный (К/(К−1))</span><b>×'+F(idealM)+'</b></div>';
+  html += '</div>';
+  if(Math.abs(mult - idealM) > 0.05){
+    html += '<div class="hint">Идеальный множитель для кэфа '+F(k)+' — <b>×'+F(idealM)+'</b>. При нём каждый выигрыш ровно перекрывает все прошлые проигрыши +1 ставку. Твой множитель '+F(mult)+' даст '+(mult>idealM?'чуть больше прибыли, но больше риск':'меньше прибыли, чем нужно')+'.</div>';
+  }
+
+  // --- Блок 3. Сколько ставок выдержит банк ---
+  html += '<h2>3. Сколько ставок выдержит банк</h2><div class="card">';
+  html += '<div class="line"><span>Банк</span><b>'+R(bank)+'</b></div>';
+  html += '<div class="line"><span>Мин. ставка</span><b>'+R(minBet)+'</b></div>';
+  html += '<div class="line"><span>Проигрышей подряд до слива</span><b>'+(steps||0)+'</b></div>';
+  html += '</div>';
+
+  if(steps === 0){
+    html += '<div class="verdict no">Банка не хватает даже на одну минимальную ставку.</div>';
+  } else if(steps <= 3){
+    html += '<div class="verdict no">Опасно: банк выдержит только '+steps+' проигрыша подряд. Слив почти гарантирован.</div>';
+  } else if(steps <= 5){
+    html += '<div class="verdict info">Банк выдержит '+steps+' проигрышей подряд. Серия из '+steps+' — не редкость.</div>';
+  } else {
+    html += '<div class="verdict yes">Банк выдержит '+steps+' проигрышей подряд. Это уже похоже на рабочую схему.</div>';
+  }
+
+  // --- Блок 4. Таблица 10 шагов ---
+  html += '<h2>4. Схема шаг за шагом</h2><div class="card">';
+  html += '<table><thead><tr><th>#</th><th>Ставка</th><th>Всего потрачено</th><th>Профит если выигрыш</th></tr></thead><tbody>'+rows+'</tbody></table>';
+  if(bust){
+    html += '<div class="warn">На шаге '+bust+' банка уже не хватает — слив.</div>';
+  } else {
+    html += '<div class="hint">Зелёная строка — первый шаг, где выигрыш перекрывает всё потраченное и даёт плюс.</div>';
+  }
+  html += '</div>';
+
+  // --- Блок 5. В каком случае будет победа ---
+  html += '<h2>5. Когда будет победа</h2><div class="card">';
+  const pWin = fairP;
+  let pLose = 1;
+  for(let i=1;i<=steps;i++) pLose *= (1-pWin);
+  html += '<div class="line"><span>P(победы) за 1 ставку</span><b class="pos">'+F(pWin*100)+'%</b></div>';
+  html += '<div class="line"><span>P(проиграть '+steps+' раз подряд)</span><b class="neg">'+F(pLose*100,3)+'%</b></div>';
+  html += '<div class="line"><span>Это примерно 1 раз на</span><b>'+(pLose>0?Math.round(1/pLose):'—')+' серий</b></div>';
+  html += '</div>';
+  html += '<div class="hint">Победа = первая же ставка, которая прошла. Каждый выигрыш даёт маленький плюс (+'+(k-1).toFixed(2)+'× от ставки на первом шаге). Но серия из '+steps+' проигрышей стирает всё, что было заработано раньше.</div>';
+
+  out.innerHTML = html;
+}
+</script>
+
+</body>
+</html>
